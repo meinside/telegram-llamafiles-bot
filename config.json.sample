@@ -1,0 +1,22 @@
+{
+    "telegram_bot_token": "1234567890:ABCDEFG0123456789abcdefghijklmnopqrstuvwxyz",
+    "allowed_telegram_usernames": [
+        "my-telegram-username"
+    ],
+    "models": [
+        {
+            "llamafile_path": "/path/to/llamafiles/mixtral-8x7b-instruct-v0.1.Q3_K_M.llamafile",
+            "llamafile_prompt_pattern": "[INST]%p[/INST]",
+            "llamafile_prompt_placeholder": "%p",
+            "llamafile_other_parameters": [
+                "--temp",
+                "0",
+                "-n",
+                "500",
+                "-c",
+                "6700"
+            ],
+            "disabled": false
+        }
+    ]
+}

@@ -1,0 +1,5 @@
+telegram-llamafiles-bot
+config.json
+vendor/
+*.swp
+*.log
