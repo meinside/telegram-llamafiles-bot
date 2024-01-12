@@ -80,13 +80,16 @@ func readConfig(path string) (conf config, err error) {
 //
 // NOTE: if `allowed_telegram_usernames` is empty, every update will be allowed
 func allowed(conf config, update tg.Update) bool {
+	if len(conf.AllowedTelegramUsernames) == 0 {
+		return true
+	}
+
 	if update.Message.From != nil && update.Message.From.Username != nil {
 		for _, username := range conf.AllowedTelegramUsernames {
-			if *update.Message.From.Username != username {
-				return false
+			if *update.Message.From.Username == username {
+				return true
 			}
 		}
-		return true
 	}
 
 	return false
@@ -123,6 +126,9 @@ func runBot(conf config) {
 			}
 		}()
 
+		// delete webhook before polling updates
+		_ = bot.DeleteWebhook(true)
+
 		// poll updates and handle them
 		bot.StartPollingUpdates(0, PollingIntervalSeconds, func(c *tg.Bot, update tg.Update, err error) {
 			// skip it if it has no message or text content
@@ -138,6 +144,11 @@ func runBot(conf config) {
 			// skip if it is an ignorable message or command
 			if *update.Message.Text == "/start" {
 				return
+			}
+
+			// add a reaction for confirming the retrieval of an update
+			if reacted := c.SetMessageReaction(update.Message.Chat.ID, update.Message.MessageID, tg.NewMessageReactionWithEmoji("👌")); !reacted.Ok {
+				log.Printf("Error: failed to react to message: %s", *reacted.Description)
 			}
 
 			// handle comment request
@@ -171,7 +182,7 @@ func runBot(conf config) {
 			}
 		})
 	} else {
-		log.Printf("failed to get info about this bot: %s", *me.Description)
+		log.Printf("Error: failed to get info about this bot: %s", *me.Description)
 	}
 }
 
@@ -179,8 +190,7 @@ func runBot(conf config) {
 func enqueueRequest(reqQueue chan request, model model, originalText, commentText *string, chatID, messageID int64) {
 	go func(queue chan request) {
 		if originalText != nil && commentText != nil {
-			log.Printf(`>>> enqueueing request with
-- model: %s
+			log.Printf(`>>> enqueueing request for model: %s
 - originalText: %s
 - commentText: %s`, model, *originalText, *commentText)
 
@@ -196,8 +206,7 @@ func enqueueRequest(reqQueue chan request, model model, originalText, commentTex
 
 			queue <- request
 		} else if originalText != nil {
-			log.Printf(`>>> enqueueing request with
-- model: %s
+			log.Printf(`>>> enqueueing request for model: %s
 - originalText: %s`, model, *originalText)
 
 			request := request{
@@ -211,6 +220,8 @@ func enqueueRequest(reqQueue chan request, model model, originalText, commentTex
 			}
 
 			queue <- request
+		} else {
+			log.Printf(`>>> dropping request for mode: %s`, *model.LlamafilePath)
 		}
 	}(reqQueue)
 }
@@ -220,6 +231,10 @@ func handleRequest(conf config, bot *tg.Bot, request request) {
 	request.startedProcessingAt = time.Now()
 
 	log.Printf(">>> handling request: %+v", request)
+
+	if acted := bot.SendChatAction(request.targetChatID, tg.ChatActionTyping, tg.OptionsSendChatAction{}); !acted.Ok {
+		log.Printf("Error: failed to send action: %s", *acted.Description)
+	}
 
 	var generated string
 
@@ -235,7 +250,7 @@ func handleRequest(conf config, bot *tg.Bot, request request) {
 		SetReplyParameters(tg.ReplyParameters{MessageID: request.targetMessageID}).
 		SetParseMode(tg.ParseModeHTML)
 	if sent := bot.SendMessage(request.targetChatID, generated, options); !sent.Ok {
-		log.Printf("Error: failed to send message to telegram: %s", *sent.Description)
+		log.Printf("Error: failed to send message: %s", *sent.Description)
 	}
 }
 
